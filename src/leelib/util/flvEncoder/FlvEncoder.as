@@ -2,12 +2,9 @@ package leelib.util.flvEncoder
 {
     import flash.display.BitmapData;
     import flash.errors.IllegalOperationError;
-    import flash.geom.Rectangle;
     import flash.utils.ByteArray;
     import flash.utils.Endian;
-    import flash.utils.IDataOutput;
     import flash.utils.getQualifiedClassName;
-    import flash.utils.getQualifiedSuperclassName;
     
 	/**
 	 * Don't instantiate this class directly. 

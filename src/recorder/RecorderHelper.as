@@ -2,11 +2,14 @@ package recorder
 {
 	import flash.display.BitmapData;
 	import flash.events.Event;
+	import flash.filesystem.File;
+	import flash.filesystem.FileMode;
 	import flash.utils.ByteArray;
 	import flash.utils.getTimer;
 	import flash.utils.setTimeout;
 	
 	import leelib.util.flvEncoder.ByteArrayFlvEncoder;
+	import leelib.util.flvEncoder.FileStreamFlvEncoder;
 	import leelib.util.flvEncoder.FlvEncoder;
 	import leelib.util.flvEncoder.VideoPayloadMakerAlchemy;
 	
@@ -15,36 +18,132 @@ package recorder
 	public class RecorderHelper
 	{
 		public static var recordVO:RecordVO;
+		private static var streamingFile:File = null;
 		
-		public static function captureFrame(recordVO:RecordVO=null):void
-		{
+		public static function captureToFile(recordVO:RecordVO=null):void {
 			if (recordVO)
 				RecorderHelper.recordVO = recordVO;
 			
-			// capture frame
-			var bitmapData:BitmapData = new BitmapData(RecorderHelper.recordVO.outputWidth,RecorderHelper.recordVO.outputHeight,false,0x0);
-			bitmapData.draw(RecorderHelper.recordVO.container);
+			if (streamingFile == null)
+				initFileStreaming();
+			
+			var bitmapData:BitmapData = captureImage();
+			RecorderHelper.addBytesToStreamingFile(bitmapData);
+			
+			scheduleNextCaptureFrame(captureToFile);			
+		}
+		
+		public static function captureToMemory(recordVO:RecordVO=null):void
+		{
+			if (recordVO)
+				RecorderHelper.recordVO = recordVO;
+				
+			var bitmapData:BitmapData = captureImage();
 			RecorderHelper.recordVO.bitmaps.push(bitmapData);
 			
-			var sec:int = int(RecorderHelper.recordVO.bitmaps.length / RecorderHelper.recordVO.flvFramerate);
-			var encodeBitmapsSecond:String = "0:"  +  ((sec < 10) ? ("0" + sec) : sec);
+			scheduleNextCaptureFrame(captureToMemory);
+		}
+		
+		public static function captureImage():BitmapData 
+		{
+			var bitmapData:BitmapData = new BitmapData(RecorderHelper.recordVO.outputWidth,RecorderHelper.recordVO.outputHeight,false,0x0);
+			bitmapData.draw(RecorderHelper.recordVO.container);	
 			
-			// schedule next captureFrame
+			return bitmapData;
+		}
+		
+		public static function scheduleNextCaptureFrame(callBack:Function):void {
+			
+			var sec:int = int( RecorderHelper.recordVO.totalFramesRecorded / RecorderHelper.recordVO.flvFramerate);
+			var encodeBitmapsSecond:String = 'Recording: ' + sec;
+			
+			if (RecorderHelper.recordVO.outputCallBackFunction != null)
+				RecorderHelper.recordVO.outputCallBackFunction(encodeBitmapsSecond);			
+			
+			RecorderHelper.recordVO.totalFramesRecorded++;
 			var elapsedMs:int = getTimer() - RecorderHelper.recordVO.startTime;
-			var nextMs:int = (RecorderHelper.recordVO.bitmaps.length / RecorderHelper.recordVO.flvFramerate) * 1000;
+			var nextMs:int = (RecorderHelper.recordVO.totalFramesRecorded / RecorderHelper.recordVO.flvFramerate) * 1000;
 			var deltaMs:int = nextMs - elapsedMs;
 			
 			if (deltaMs < 10) 
 				deltaMs = 10;
 			
-			if (RecorderHelper.recordVO.outputCallBackFunction != null)
-				RecorderHelper.recordVO.outputCallBackFunction(encodeBitmapsSecond);
+			RecorderHelper.recordVO.timeoutId = setTimeout(callBack, deltaMs);			
+		}
+		
+		public static function initFileStreaming(fileName:String='video.flv'):void {
 			
-			RecorderHelper.recordVO.timeoutId = setTimeout(captureFrame, deltaMs);
+			streamingFile = File.documentsDirectory.resolvePath(fileName);
+			RecorderHelper.recordVO.fsFlvEncoder = new FileStreamFlvEncoder(streamingFile, RecorderHelper.recordVO.flvFramerate);
+			RecorderHelper.recordVO.fsFlvEncoder.fileStream.openAsync(streamingFile, FileMode.UPDATE);
+			
+			// video
+			if (RecorderHelper.recordVO.encodeVideo)
+				RecorderHelper.recordVO.fsFlvEncoder.setVideoProperties(recordVO.outputWidth,recordVO.outputHeight, VideoPayloadMakerAlchemy);	
+			
+			// audio
+			if (RecorderHelper.recordVO.encodeAudio)
+				RecorderHelper.recordVO.fsFlvEncoder.setAudioProperties(FlvEncoder.SAMPLERATE_44KHZ, true, false, true);			
+			
+			RecorderHelper.recordVO.fsFlvEncoder.start();
+			RecorderHelper.recordVO.encodeFrameNum = 1;
+		}
+		
+		public static function addBytesToStreamingFile(bitmapData:BitmapData):void {
+			
+			var fileByteArray:ByteArray;
+			var bitmapData:BitmapData;
+			var audioFrameSize:int = RecorderHelper.recordVO.fsFlvEncoder.audioFrameSize;
+			
+			// audio
+			if (RecorderHelper.recordVO.encodeAudio)
+			{
+				fileByteArray = new ByteArray();
+				var posEnd:int = RecorderHelper.recordVO.encodeFrameNum * audioFrameSize;
+				var posStart:int = posEnd-audioFrameSize;
+				var micByteArray:ByteArray = RecorderHelper.recordVO.micUtil.clone(RecorderHelper.recordVO.micUtil.byteArray);
+				
+				if (posStart < 0 || micByteArray.length < posEnd) {
+					trace("SILENCE:: Position Start: " + posStart + ", position ends: " + posEnd + ", micByteArray.length: " + micByteArray.length);
+					RecorderHelper.recordVO.micUtil.insertSilence(audioFrameSize);
+					fileByteArray.writeBytes(RecorderHelper.recordVO.micUtil.byteArray, 0, audioFrameSize);
+				}
+				else {
+					// trace("Position Start: " + posStart + ", position ends: " + posEnd + ", micByteArray.length: " + micByteArray.length);
+					micByteArray.position = 0;
+					try {
+						fileByteArray.writeBytes(micByteArray, posStart, audioFrameSize);
+					} catch (error:Error) {
+						trace('error: ' + micByteArray.length);
+					}
+					
+					if (RecorderHelper.recordVO.encodeFrameNum > 30) {
+						trace("CLEAR audio cache: " + RecorderHelper.recordVO.encodeFrameNum);
+						RecorderHelper.recordVO.micUtil.shift(posStart+audioFrameSize);
+						RecorderHelper.recordVO.encodeFrameNum = 1;
+					}
+					else {
+						RecorderHelper.recordVO.encodeFrameNum++;
+					}
+				}
+			}
+			
+			RecorderHelper.recordVO.fsFlvEncoder.addFrame(bitmapData, fileByteArray);
+		}
+		
+		public static function closeFile():void {
+			
+			RecorderHelper.recordVO.micUtil.stop();
+			
+			RecorderHelper.recordVO.fsFlvEncoder.updateDurationMetadata();
+			RecorderHelper.recordVO.fsFlvEncoder.fileStream.close();
+			RecorderHelper.recordVO.fsFlvEncoder.kill();				
 		}
 		
 		public static function startEncoding():void
 		{
+			RecorderHelper.recordVO.micUtil.stop();
+			
 			// Make FlvEncoder object
 			RecorderHelper.recordVO.byteArrayFlvEncoder = new ByteArrayFlvEncoder(RecorderHelper.recordVO.flvFramerate);
 			
@@ -99,12 +198,12 @@ package recorder
 				baAudio = new ByteArray();
 				var pos:int = RecorderHelper.recordVO.encodeFrameNum * RecorderHelper.recordVO.byteArrayFlvEncoder.audioFrameSize;
 				
-				if (pos < 0 || pos + RecorderHelper.recordVO.byteArrayFlvEncoder.audioFrameSize > RecorderHelper.recordVO.audioData.length) {
+				if (pos < 0 || pos + RecorderHelper.recordVO.byteArrayFlvEncoder.audioFrameSize > RecorderHelper.recordVO.micUtil.byteArray.length) {
 					// trace('out of bounds:', RecorderHelper.recordVO.encodeFrameNum, pos + RecorderHelper.recordVO.byteArrayFlvEncoder.audioFrameSize, 'versus', RecorderHelper.recordVO.audioData); 
 					baAudio.length = RecorderHelper.recordVO.byteArrayFlvEncoder.audioFrameSize; // zero's
 				}
 				else {
-					baAudio.writeBytes(RecorderHelper.recordVO.audioData, pos, RecorderHelper.recordVO.byteArrayFlvEncoder.audioFrameSize);
+					baAudio.writeBytes(RecorderHelper.recordVO.micUtil.byteArray, pos, RecorderHelper.recordVO.byteArrayFlvEncoder.audioFrameSize);
 				}
 			}
 			

@@ -28,13 +28,13 @@ package leelib.util.flvEncoder
 		{
 			_microphone = microphone;
 		}
-		
+
 		public function record():void
 		{
 			_startTime = getTimer();
 			
 			_byteArray.length = 0;
-
+			
 			_microphone.addEventListener(SampleDataEvent.SAMPLE_DATA, onSampleData);
 			_microphone.addEventListener(StatusEvent.STATUS, onStatus); // (may never fire)
 		}
@@ -90,5 +90,20 @@ package leelib.util.flvEncoder
 			// private var _recordingEvent:RecordingEvent = new RecordingEvent( RecordingEvent.RECORDING, 0 );
 			// this.dispatchEvent( _recordingEvent );
 		}
+		
+		public function insertSilence(size:int=20480):void {
+			
+			for (var i:int = 0; i<size; i++) { 
+				_byteArray.writeFloat(0); 
+			} 
+		}
+		
+		public function clone(source:Object):*
+		{
+			var myBA:ByteArray = new ByteArray();
+			myBA.writeObject(source);
+			myBA.position = 0;
+			return(myBA.readObject());
+		}		
 	}
 }

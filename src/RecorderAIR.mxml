@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
 			   xmlns:s="library://ns.adobe.com/flex/spark" 
 			   xmlns:mx="library://ns.adobe.com/flex/mx" 
-			   minWidth="955" minHeight="600" 
+			   minWidth="400" minHeight="400" 
 			   creationComplete="creationCompleteHandler()">
 	
 	<fx:Script>
@@ -16,13 +16,14 @@
 			private var video:Video;
 			private var netConnection:NetConnection;
 			private var ns:NetStream;
-			private var micUtil:MicRecorderUtil;
 			
 			private var recordVO:RecordVO;
+			private var isStreamToLocalFile:Boolean = true;
 			
 			protected function creationCompleteHandler():void
 			{	
-				recordVO = new RecordVO(320,240,15,0,0,null,container,outputCallBackFunction,true,true,null,0,null,this);
+				recordVO = new RecordVO(320,240,15,0,0,null,container,outputCallBackFunction,true,true,null,null,0,this);
+				// recordVO.encodeAudio = false;
 				
 				// video
 				video = new Video();
@@ -42,7 +43,7 @@
 				mic.setSilenceLevel(0, int.MAX_VALUE);
 				mic.gain = 100;
 				mic.rate = 44;
-				micUtil = new MicRecorderUtil(mic);			
+				recordVO.micUtil = new MicRecorderUtil(mic);			
 			}	
 			
 			private function outputCallBackFunction(message:String):void {
@@ -60,49 +61,52 @@
 			}
 			
 			private function startRecording():void {
+				
+				recordVO.micUtil.record();
+				
 				recordVO.bitmaps = new Array();
 				recordVO.startTime = getTimer();
-				RecorderHelper.captureFrame(recordVO);
 				
-				micUtil.record();
+				if (isStreamToLocalFile)
+					RecorderHelper.captureToFile(recordVO);
+				else 
+					RecorderHelper.captureToMemory(recordVO);
+				
 			}
 			
 			private function recordButtonHandler(event:MouseEvent):void {
-				if (recordBtn.label == 'Record') 
-					record();
-				else if (recordBtn.label == 'Stop')
-					startEncoding();
+				if (recordBtn.label == 'Record') {
+					// recording
+					recordBtn.label = "Stop"
+					startRecording();
+				}
+				else if (recordBtn.label == 'Stop') {
+					clearTimeout(recordVO.timeoutId);
+					container.alpha = 0.5;
+					recordBtn.label = "Record";
+					
+					// encoding
+					if (!isStreamToLocalFile)
+						RecorderHelper.startEncoding();
+					else
+						RecorderHelper.closeFile();
+				}
 			}
 			
 			private function saveButtonHandler(event:MouseEvent):void {
 				var fileRef:FileReference = new FileReference();
 				fileRef.save(RecorderHelper.recordVO.byteArrayFlvEncoder.byteArray, "recording.flv");			
-			}
-			
-			private function record():void  {
-				recordBtn.label = "Stop"
-				startRecording();
-			}
-			
-			private function startEncoding():void {
-				clearTimeout(recordVO.timeoutId);
-				container.alpha = 0.5;
-				recordBtn.label = "Record";
-				
-				micUtil.stop();
-				RecorderHelper.recordVO.audioData = micUtil.byteArray;
-				RecorderHelper.startEncoding();
 			}			
 			
 		]]>
 	</fx:Script>
 	
 	<s:BorderContainer id="container" height="260" width="320" x="10" y="40">
-		<s:Label id="output" text="0:00" />
+		<s:Label id="output" />
 		<mx:UIComponent id="videoContainer" height="240" width="320" x="0" y="10"/>
 	</s:BorderContainer>
 	
 	<s:Button id="recordBtn" label="Record" click="recordButtonHandler(event)" y="10" />
 	<s:Button label="Save" click="saveButtonHandler(event)" x="80" y="10" />
 	
-</s:Application>
+</s:WindowedApplication>
