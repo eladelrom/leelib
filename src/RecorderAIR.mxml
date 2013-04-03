@@ -39,10 +39,7 @@
 				video.attachCamera(camera);				
 				
 				// audio
-				var mic:Microphone = Microphone.getMicrophone();
-				mic.setSilenceLevel(0, int.MAX_VALUE);
-				mic.gain = 100;
-				mic.rate = 44;
+				var mic:Microphone = MicRecorderUtil.setMicrophoneDefaultSettings();
 				recordVO.micUtil = new MicRecorderUtil(mic);			
 			}	
 			

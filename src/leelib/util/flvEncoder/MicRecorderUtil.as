@@ -23,6 +23,14 @@ package leelib.util.flvEncoder
 		
 		private var _completeEvent:Event = new Event ( Event.COMPLETE );
 		
+		public static function setMicrophoneDefaultSettings():Microphone {
+			var mic:Microphone = Microphone.getMicrophone();
+			mic.setSilenceLevel(0, int.MAX_VALUE);
+			mic.gain = 100;
+			mic.rate = 44;
+			
+			return mic;
+		}
 
 		public function MicRecorderUtil(microphone:Microphone)
 		{
