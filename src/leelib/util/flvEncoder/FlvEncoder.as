@@ -1,11 +1,11 @@
 package leelib.util.flvEncoder 
 {
-    import flash.display.BitmapData;
-    import flash.errors.IllegalOperationError;
-    import flash.utils.ByteArray;
-    import flash.utils.Endian;
-    import flash.utils.getQualifiedClassName;
-    
+	import flash.display.BitmapData;
+	import flash.errors.IllegalOperationError;
+	import flash.utils.ByteArray;
+	import flash.utils.Endian;
+	import flash.utils.getQualifiedClassName;
+	
 	/**
 	 * Don't instantiate this class directly. 
 	 * Use ByteArrayFlvEncoder or FileStreamFlvEncoder instead.
@@ -18,13 +18,13 @@ package leelib.util.flvEncoder
 		
 		public static const BLOCK_WIDTH:int = 32;
 		public static const BLOCK_HEIGHT:int = 32;
-
+		
 		protected var _frameRate:Number;
 		protected var _bytes:IByteable;
 		
 		private var _duration:Number;
 		private var _durationPos:int;
-
+		
 		private var _hasVideo:Boolean;
 		private var _frameWidth:int;
 		private var _frameHeight:int;
@@ -34,7 +34,7 @@ package leelib.util.flvEncoder
 		private var _is16Bit:Boolean;
 		private var _isStereo:Boolean;
 		private var _isAudioInputFloats:Boolean;
-
+		
 		private var _videoPayloadMaker:IVideoPayload;
 		
 		private var _soundPropertiesByte:uint;
@@ -42,14 +42,14 @@ package leelib.util.flvEncoder
 		
 		private var _lastTagSize:uint = 0;
 		private var _frameNum:int = 0;
-
+		
 		private var _isStarted:Boolean;
 		
 		
 		/**
 		 * @param $framesPerSecond		Dictates the framerate of FLV playback. 
 		 */
-	 	public function FlvEncoder($frameRate:Number)
+		public function FlvEncoder($frameRate:Number)
 		{
 			var s:String = getQualifiedClassName(this);
 			s = s.substr(s.indexOf("::")+2);
@@ -66,7 +66,7 @@ package leelib.util.flvEncoder
 			// _bytes must be instantiated here
 			//
 		}
-
+		
 		/**
 		 * Defines the video dimensions to be used in the FLV.
 		 * setVideoProperties() must be called before calling "start()"
@@ -158,14 +158,14 @@ package leelib.util.flvEncoder
 			// create metadata tag
 			ba.writeUnsignedInt( _lastTagSize );
 			ba.writeBytes( makeMetaDataTag() );
-
+			
 			// get and save position of metadata's duration float
 			var tmp:ByteArray = new ByteArray();
 			tmp.writeUTFBytes("duration");
 			_durationPos = byteArrayIndexOf(ba, tmp) + tmp.length + 1;
 			
 			_bytes.writeBytes(ba);
-
+			
 		}
 		
 		/**
@@ -200,10 +200,15 @@ package leelib.util.flvEncoder
 				// which are 2 bytes per value. Don't let this be a source of confusion...
 				
 				var b:ByteArray = _isAudioInputFloats ? floatsToSignedShorts($uncompressedAudio) : $uncompressedAudio;
-
+				
 				writeAudioTagTo(_bytes, b);
 			}
-
+			
+			// Clean
+			$bitmapData.dispose();
+			b.clear();
+			b = null;
+			
 			_frameNum++;
 		}
 		
@@ -214,7 +219,7 @@ package leelib.util.flvEncoder
 			_bytes.pos = _bytes.len; // (restore)
 		}
 		
-
+		
 		protected function get bytes():IByteable
 		{
 			return _bytes;
@@ -291,7 +296,7 @@ package leelib.util.flvEncoder
 		{
 			var baTag:ByteArray = new ByteArray();
 			var baMetaData:ByteArray = makeMetaData();
-
+			
 			// tag 'header'
 			baTag.writeByte( 18 ); 					// tagType = script data
 			writeUI24(baTag, baMetaData.length);	// data size
@@ -305,25 +310,25 @@ package leelib.util.flvEncoder
 			_lastTagSize = baTag.length;
 			return baTag;
 		}
-
+		
 		private function makeMetaData():ByteArray
 		{
 			// onMetaData info goes in a ScriptDataObject of data type 'ECMA Array'
-
+			
 			var b:ByteArray = new ByteArray();
 			
 			// ObjectNameType (always 2)
 			b.writeByte(2);	
-		
+			
 			// ObjectName (type SCRIPTDATASTRING):
 			writeUI16(b, "onMetaData".length); // StringLength
 			b.writeUTFBytes( "onMetaData" ); // StringData
-		
+			
 			// ObjectData (type SCRIPTDATAVALUE):
 			
 			b.writeByte(8); // Type (ECMA array = 8)
 			b.writeUnsignedInt(7) // // Elements in array
-		
+			
 			// SCRIPTDATAVARIABLES...
 			
 			writeUI16(b, "duration".length);
@@ -335,27 +340,27 @@ package leelib.util.flvEncoder
 			b.writeUTFBytes("width");
 			b.writeByte(0); 
 			b.writeDouble(_frameWidth);
-
+			
 			writeUI16(b, "height".length);
 			b.writeUTFBytes("height");
 			b.writeByte(0); 
 			b.writeDouble(_frameHeight);
-
+			
 			writeUI16(b, "framerate".length);
 			b.writeUTFBytes("framerate");
 			b.writeByte(0); 
 			b.writeDouble(_frameRate);
-
+			
 			writeUI16(b, "videocodecid".length);
 			b.writeUTFBytes("videocodecid");
 			b.writeByte(0); 
 			b.writeDouble(3); // 'Screen Video' = 3
-
+			
 			writeUI16(b, "canSeekToEnd".length);
 			b.writeUTFBytes("canSeekToEnd");
 			b.writeByte(1); 
 			b.writeByte(int(true));
-
+			
 			var mdc:String = "FlvEncoder v0.9 Lee Felarca";			
 			writeUI16(b, "metadatacreator".length);
 			b.writeUTFBytes("metadatacreator");
@@ -365,14 +370,14 @@ package leelib.util.flvEncoder
 			
 			// VariableEndMarker1 (type UI24 - always 9)
 			writeUI24(b, 9);
-		
+			
 			return b;			
 		}
-
+		
 		private function writeVideoTagTo($bytes:IByteable, $bitmapData:BitmapData):void
 		{
 			var pos:int = $bytes.pos;
-
+			
 			var ba:ByteArray = _videoPayloadMaker.make($bitmapData);
 			
 			var timeStamp:uint = uint(1000/_frameRate * _frameNum);
@@ -383,7 +388,7 @@ package leelib.util.flvEncoder
 			writeUI24($bytes, timeStamp);			// timestamp in ms
 			$bytes.writeByte(0);					// timestamp extended, no need 
 			writeUI24($bytes, 0);					// streamID always 0
-
+			
 			// payload			
 			$bytes.writeBytes( ba );
 			
@@ -417,7 +422,7 @@ package leelib.util.flvEncoder
 			
 			// soundformat [4 bits] - only supporting linear PCM little endian == 3
 			u  = (3 << 4); 
-
+			
 			// soundrate [2 bits]
 			switch(_sampleRate) {
 				case SAMPLERATE_11KHZ: 	val = 1; break;
@@ -435,7 +440,7 @@ package leelib.util.flvEncoder
 			u += (val << 0);			
 			
 			// trace('FlvEncoder.makeSoundPropertiesByte():', u.toString(2));
-
+			
 			return u;
 		}
 		
@@ -468,7 +473,7 @@ package leelib.util.flvEncoder
 			
 			$ba.position = $position;
 			$searchTerm.position = 0;
-
+			
 			for (var i:int = 0; i < $searchTerm.length; i++)
 			{
 				var valBa:int = $ba.readByte();
@@ -495,18 +500,20 @@ package leelib.util.flvEncoder
 			stream.writeByte( p >> 8 )
 			stream.writeByte( p & 0xff );			
 		}
-
+		
 		public static function writeUI4_12(stream:*, p1:uint, p2:uint):void
 		{
 			// writes a 4-bit value followed by a 12-bit value in a total of 2 bytes
-
+			
 			var byte1a:int = p1 << 4;
 			var byte1b:int = p2 >> 8;
 			var byte1:int = byte1a + byte1b;
 			var byte2:int = p2 & 0xff;
-
+			
 			stream.writeByte(byte1);
 			stream.writeByte(byte2);
 		}		
 	}
 }
+
+

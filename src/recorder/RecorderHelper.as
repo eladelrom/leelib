@@ -4,9 +4,12 @@ package recorder
 	import flash.events.Event;
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
+	import flash.system.System;
 	import flash.utils.ByteArray;
 	import flash.utils.getTimer;
 	import flash.utils.setTimeout;
+	
+	import mx.formatters.DateFormatter;
 	
 	import leelib.util.flvEncoder.ByteArrayFlvEncoder;
 	import leelib.util.flvEncoder.FileStreamFlvEncoder;
@@ -14,7 +17,7 @@ package recorder
 	import leelib.util.flvEncoder.VideoPayloadMakerAlchemy;
 	
 	import recorder.model.RecordVO;
-
+	
 	public class RecorderHelper
 	{
 		public static var recordVO:RecordVO;
@@ -25,19 +28,26 @@ package recorder
 				RecorderHelper.recordVO = recordVO;
 			
 			if (streamingFile == null)
-				initFileStreaming();
+				initFileStreaming('video_'+currentDateTimeString()+'.flv');
 			
-			var bitmapData:BitmapData = captureImage();
-			RecorderHelper.addBytesToStreamingFile(bitmapData);
-			
+			RecorderHelper.addBytesToStreamingFile( captureImage() );
 			scheduleNextCaptureFrame(captureToFile);			
+		}
+		
+		private static function currentDateTimeString():String
+		{               
+			var currentDateTime:Date = new Date();
+			var currentDF:DateFormatter = new DateFormatter();
+			currentDF.formatString = "LL_NN_SS"
+			var dateTimeString:String = currentDF.format(currentDateTime);
+			return dateTimeString;
 		}
 		
 		public static function captureToMemory(recordVO:RecordVO=null):void
 		{
 			if (recordVO)
 				RecorderHelper.recordVO = recordVO;
-				
+			
 			var bitmapData:BitmapData = captureImage();
 			RecorderHelper.recordVO.bitmaps.push(bitmapData);
 			
@@ -46,6 +56,9 @@ package recorder
 		
 		public static function captureImage():BitmapData 
 		{
+			if (!RecorderHelper.recordVO.encodeVideo)
+				return null;
+			
 			var bitmapData:BitmapData = new BitmapData(RecorderHelper.recordVO.outputWidth,RecorderHelper.recordVO.outputHeight,false,0x0);
 			bitmapData.draw(RecorderHelper.recordVO.container);	
 			
@@ -75,6 +88,7 @@ package recorder
 			
 			streamingFile = File.documentsDirectory.resolvePath(fileName);
 			RecorderHelper.recordVO.fsFlvEncoder = new FileStreamFlvEncoder(streamingFile, RecorderHelper.recordVO.flvFramerate);
+			
 			RecorderHelper.recordVO.fsFlvEncoder.fileStream.openAsync(streamingFile, FileMode.UPDATE);
 			
 			// video
@@ -91,36 +105,39 @@ package recorder
 		
 		public static function addBytesToStreamingFile(bitmapData:BitmapData):void {
 			
-			var fileByteArray:ByteArray;
-			var bitmapData:BitmapData;
-			var audioFrameSize:int = RecorderHelper.recordVO.fsFlvEncoder.audioFrameSize;
+			var micByteArray:ByteArray = null;
+			var audioFrameSize:uint = RecorderHelper.recordVO.fsFlvEncoder.audioFrameSize;
 			
 			// audio
 			if (RecorderHelper.recordVO.encodeAudio)
 			{
-				fileByteArray = new ByteArray();
-				var posEnd:int = RecorderHelper.recordVO.encodeFrameNum * audioFrameSize;
-				var posStart:int = posEnd-audioFrameSize;
-				var micByteArray:ByteArray = RecorderHelper.recordVO.micUtil.clone(RecorderHelper.recordVO.micUtil.byteArray);
+				micByteArray = new ByteArray();
+				var posEnd:uint = RecorderHelper.recordVO.encodeFrameNum * audioFrameSize;
+				var posStart:uint = posEnd-audioFrameSize;
+				micByteArray = RecorderHelper.recordVO.micUtil.clone(RecorderHelper.recordVO.micUtil.byteArray);
 				
 				if (posStart < 0 || micByteArray.length < posEnd) {
 					trace("SILENCE:: Position Start: " + posStart + ", position ends: " + posEnd + ", micByteArray.length: " + micByteArray.length);
 					RecorderHelper.recordVO.micUtil.insertSilence(audioFrameSize);
-					fileByteArray.writeBytes(RecorderHelper.recordVO.micUtil.byteArray, 0, audioFrameSize);
+					micByteArray.writeBytes(RecorderHelper.recordVO.micUtil.byteArray, 0, audioFrameSize);
 				}
 				else {
-					// trace("Position Start: " + posStart + ", position ends: " + posEnd + ", micByteArray.length: " + micByteArray.length);
+					//trace("Position Start: " + posStart + ", position ends: " + posEnd + ", micByteArray.length: " + micByteArray.length);
 					micByteArray.position = 0;
 					try {
-						fileByteArray.writeBytes(micByteArray, posStart, audioFrameSize);
+						micByteArray.writeBytes(micByteArray, posStart, audioFrameSize);
 					} catch (error:Error) {
 						trace('error: ' + micByteArray.length);
 					}
 					
-					if (RecorderHelper.recordVO.encodeFrameNum > 30) {
-						trace("CLEAR audio cache: " + RecorderHelper.recordVO.encodeFrameNum);
-						RecorderHelper.recordVO.micUtil.shift(posStart+audioFrameSize);
+					if (RecorderHelper.recordVO.encodeFrameNum > 50) {
+						// cleanup
+						trace('---------------------------'+ System.freeMemory +'----------------------------------------');
+						trace("size before: " + RecorderHelper.recordVO.micUtil.byteArray.length);
+						trace("Position Start: " + posStart + ", position ends: " + posEnd + ", byteArray.length: " + RecorderHelper.recordVO.micUtil.byteArray.length);
+						RecorderHelper.recordVO.micUtil.shift(posStart,audioFrameSize);
 						RecorderHelper.recordVO.encodeFrameNum = 1;
+						trace("size after: " + RecorderHelper.recordVO.micUtil.byteArray.length);
 					}
 					else {
 						RecorderHelper.recordVO.encodeFrameNum++;
@@ -128,16 +145,35 @@ package recorder
 				}
 			}
 			
-			RecorderHelper.recordVO.fsFlvEncoder.addFrame(bitmapData, fileByteArray);
+			RecorderHelper.recordVO.fsFlvEncoder.addFrame(bitmapData, micByteArray);
+			
+			// clean up
+			if (RecorderHelper.recordVO.encodeVideo) {
+				bitmapData.dispose();
+				bitmapData = null;
+			}
+			
+			if (RecorderHelper.recordVO.encodeAudio) {
+				micByteArray.clear();
+				micByteArray = null;
+			}
+			
+			// clean gc for AIR apps
+			System.gc();
+			System.gc();
 		}
 		
 		public static function closeFile():void {
 			
-			RecorderHelper.recordVO.micUtil.stop();
+			if (RecorderHelper.recordVO.encodeAudio) {
+				RecorderHelper.recordVO.micUtil.stop();
+			}
 			
 			RecorderHelper.recordVO.fsFlvEncoder.updateDurationMetadata();
 			RecorderHelper.recordVO.fsFlvEncoder.fileStream.close();
-			RecorderHelper.recordVO.fsFlvEncoder.kill();				
+			
+			if (RecorderHelper.recordVO.encodeVideo)
+				RecorderHelper.recordVO.fsFlvEncoder.kill();				
 		}
 		
 		public static function startEncoding():void

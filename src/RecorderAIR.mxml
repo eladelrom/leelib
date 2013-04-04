@@ -22,7 +22,7 @@
 			
 			protected function creationCompleteHandler():void
 			{	
-				recordVO = new RecordVO(320,240,15,0,0,null,container,outputCallBackFunction,true,true,null,null,0,this);
+				recordVO = new RecordVO(320,240,3,0,0,null,container,outputCallBackFunction,true,true,null,null,0,this);
 				// recordVO.encodeAudio = false;
 				
 				// video

@@ -30,13 +30,13 @@ package leelib.util.flvEncoder
 			mic.rate = 44;
 			
 			return mic;
-		}
-
+		}		
+		
 		public function MicRecorderUtil(microphone:Microphone)
 		{
 			_microphone = microphone;
 		}
-
+		
 		public function record():void
 		{
 			_startTime = getTimer();
@@ -69,13 +69,28 @@ package leelib.util.flvEncoder
 		 * Effectly removes the first $pos bytes from _byteArray.
 		 * NB, creates a new instance of ByteArray; cursor ends up at the end.
 		 */
-		public function shift($pos:uint):void
+		public function shift($pos:uint,$offset:uint=-1):void
 		{
 			var ba:ByteArray = new ByteArray();
-			ba.writeBytes(_byteArray, $pos, _byteArray.length - $pos);
-			_byteArray = ba;
+			
+			if ($offset != -1 && _byteArray.length>=$pos+$offset) {
+				ba.writeBytes(_byteArray, _byteArray.length - $offset, $offset);
+			}
+			else {
+				trace('leave len!');
+				ba.writeBytes(_byteArray, $pos, _byteArray.length - $pos);
+			}
+			
+			_byteArray.clear();
+			_byteArray = null;
+			_byteArray = new ByteArray();
+			_byteArray.writeObject(ba);
+			_byteArray.position = _byteArray.length;
+			
+			ba.clear();
+			ba = null;
 		}
-
+		
 		//
 		
 		private function onStatus($e:StatusEvent):void
@@ -108,10 +123,11 @@ package leelib.util.flvEncoder
 		
 		public function clone(source:Object):*
 		{
-			var myBA:ByteArray = new ByteArray();
-			myBA.writeObject(source);
-			myBA.position = 0;
-			return(myBA.readObject());
+			var ba:ByteArray = new ByteArray();
+			ba.writeObject(source);
+			ba.position = 0;
+			return(ba.readObject());
 		}		
 	}
 }
+
