@@ -1,7 +1,7 @@
 leelib
 ======
 
-Open-source AS3 library, including Flv Encoder
+Open-source AS3 library, including Flv Encoder.  This implementation is meant for capturing entire application and not just the webcam.
 
 March 28, 2013:
 Author: Elad Elrom
